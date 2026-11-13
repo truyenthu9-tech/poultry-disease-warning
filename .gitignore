@@ -1,0 +1,7 @@
+# Python packages
+*.pyc
+__pycache__/
+*.pyo
+.pytest_cache/
+.DS_Store
+.env

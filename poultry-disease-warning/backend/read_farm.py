@@ -1,0 +1,1 @@
+Get-Content "C:\Users\Admin\OneDrive - Trường Đại học Công nghiệp Hà Nội\Documents\deepseek-harness\default-workspace\poultry-disease-warning\backend\app\models\farm.py" -Raw

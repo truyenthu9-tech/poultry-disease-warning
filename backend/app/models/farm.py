@@ -1,73 +1,38 @@
-"""Model Trang trại với SQLAlchemy 2.0, GeoAlchemy2."""
-
+"""Model trang trại."""
 import uuid
-from datetime import datetime, timezone
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, DateTime, String, Text
-from sqlalchemy.dialects.postgresql import ENUM
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, BaseModel
+from app.models.base import Base, IdTimestampMixin
+from app.models.enums import PoultryType, pg_enum
 
 
-class Farm(Base):
-    """Trang trại chăn nuôi gia cầm."""
-
+class Farm(IdTimestampMixin, Base):
     __tablename__ = "farms"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        uuid.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False, index=True
-    )
-    """Mã định danh trang trại (UUID)."""
-
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    """Tên trang trại."""
-
     owner_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    """Họ và tên chủ sở hữu."""
-
-    phone: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
-    """Số điện thoại liên hệ."""
-
-    poultry_type: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
-    """Loại gia cầm (ví dụ: broiler, layer, thả tự do, vịt, ngan)."""
-
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    province: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    district: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    commune: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    hamlet: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    poultry_type: Mapped[PoultryType] = mapped_column(
+        pg_enum(PoultryType, "poultry_type"), default=PoultryType.CHICKEN, nullable=False
+    )
     capacity: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
-    """Công suất nuôi (số lượng đầu). Phải >= 0."""
-
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
-    """Trạng thái hoạt động."""
-
-    location: Mapped[str | None] = mapped_column(
-        Geometry(geometry_type="POINT", srid=4326),
-        nullable=True,
+    # Tài khoản được xem và xác nhận cảnh báo của trang trại này. owner_name ở trên chỉ là tên để liên hệ.
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    """Định dạng GeoAlchemy2 POINT('SRID=4326;POINT(lon lat)')."""
-
-    address: Mapped[str] = mapped_column(Text, nullable=False)
-    """Địa chỉ chi tiết."""
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default="now()",
-    )
-    """Thời điểm tạo."""
-
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default="now()",
-        onupdate="now()",
-    )
-    """Thời điểm cập nhật."""
-
-    # Relationship với Outbreak (nếu trang trại liên quan đến ổ dịch)
-    outbreaks: Mapped[list["Outbreak"]] = relationship(
-        "Outbreak",
-        back_populates="farm",
-        lazy="selectin",
+    location = mapped_column(
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=True), nullable=True
     )
 
 

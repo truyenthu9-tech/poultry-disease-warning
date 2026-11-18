@@ -1,50 +1,24 @@
-"""Model cơ sở chung: UUID tự tăng, timestamp tự động, chuyển đổi sang dict."""
-
+"""Base và mixin chung: id UUID, created_at, updated_at."""
 import uuid
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime
 
-from sqlalchemy import func
-from sqlalchemy.dialects.postgresql import ENUM
+from sqlalchemy import DateTime, func
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import CHAR, SMALLINT, TEXT, TIMESTAMP
 
-from app.core.database import Base as SqlAlchemyBase, now_aware
+from app.core.database import Base  # noqa: F401
 
 
-class Base(SqlAlchemyBase):
-    """Mixin: cột id (UUID) và cột timestamp tự động."""
-
+class IdTimestampMixin:
     id: Mapped[uuid.UUID] = mapped_column(
-        uuid.UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4,
-        nullable=False,
-        index=True,
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True),
-        nullable=False,
-        server_default=func.now(),
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True),
+        DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
     )
-
-
-class BaseModel(Base):
-    """Mixin dùng chung cho các model nghiệp vụ."""
-
-    def to_dict(self) -> dict[str, Any]:
-        """Xuất toàn bộ thuộc tính (loại bỏ trạng thái SQLAlchemy)."""
-        data = vars(self).copy()
-        data.pop("_sa_instance_state", None)
-        return {k: v for k, v in data.items() if not k.startswith("_")}
-
-    def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} {self.id}>"

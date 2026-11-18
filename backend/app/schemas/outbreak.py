@@ -1,66 +1,81 @@
-"""Schema liên quan đến ổ dịch gia cầm."""
-from datetime import datetime, timezone
-from typing import Optional
+"""Schema ổ dịch."""
+import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-class Location(BaseModel):
-    """Tọa độ địa lý cho API request/response."""
-
-    latitude: float = Field(gt=-90, lt=90)
-    longitude: float = Field(gt=-180, lt=180)
+from app.models.enums import OutbreakStatus, Severity
+from app.schemas.common import Location, ORMResponse
 
 
 class OutbreakCreate(BaseModel):
-    """Dữ liệu tạo ổ dịch."""
-
     model_config = ConfigDict(extra="forbid")
 
-    virus_type: str = Field(..., min_length=1, max_length=255)
-    province: str = Field(..., min_length=1, max_length=100)
-    district: Optional[str] = Field(default=None, max_length=100)
-    latitude: float = Field(gt=-90, lt=90, alias="latitude")
-    longitude: float = Field(gt=-180, lt=180, alias="longitude")
-    address: str = Field(..., max_length=65535)
+    virus_type: str = Field(min_length=1, max_length=255)
+    province: str = Field(min_length=1, max_length=100)
+    district: str | None = Field(default=None, max_length=100)
+    commune: str | None = Field(default=None, max_length=100)
+    hamlet: str | None = Field(default=None, max_length=150)
+    address: str | None = None
+    location: Location
     cases_count: int = Field(default=0, ge=0)
-    severity: str = Field(default="medium", min_length=1, max_length=20)
-    reported_date: Optional[datetime] = Field(default=None)
+    status: OutbreakStatus = OutbreakStatus.ACTIVE
+    severity: Severity = Severity.MEDIUM
+    radius_km: float | None = Field(default=None, gt=0, le=500)
+    reported_date: datetime | None = None
+    onset_date: datetime | None = None
 
 
 class OutbreakUpdate(BaseModel):
-    """Dữ liệu cập nhật ổ dịch."""
-
     model_config = ConfigDict(extra="forbid")
 
-    virus_type: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    province: Optional[str] = Field(default=None, max_length=100)
-    district: Optional[str] = Field(default=None, max_length=100)
-    latitude: Optional[float] = Field(default=None, gt=-90, lt=90)
-    longitude: Optional[float] = Field(default=None, gt=-180, lt=180)
-    address: Optional[str] = Field(default=None, max_length=65535)
-    cases_count: Optional[int] = Field(default=None, ge=0)
-    severity: Optional[str] = Field(default=None, min_length=1, max_length=20)
-    status: Optional[str] = Field(default=None)
+    virus_type: str | None = Field(default=None, min_length=1, max_length=255)
+    province: str | None = Field(default=None, min_length=1, max_length=100)
+    district: str | None = Field(default=None, max_length=100)
+    commune: str | None = Field(default=None, max_length=100)
+    hamlet: str | None = Field(default=None, max_length=150)
+    address: str | None = None
+    location: Location | None = None
+    cases_count: int | None = Field(default=None, ge=0)
+    status: OutbreakStatus | None = None
+    severity: Severity | None = None
+    radius_km: float | None = Field(default=None, gt=0, le=500)
+    reported_date: datetime | None = None
+    onset_date: datetime | None = None
 
 
-class OutbreakResponse(BaseModel):
-    """Thông tin ổ dịch."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str  # UUID string from model (not auto-generated in schema since model uses String id)
+class OutbreakResponse(ORMResponse):
+    id: uuid.UUID
     virus_type: str
     province: str
-    district: Optional[str] = None
-    location: Location
-    address: str
+    district: str | None = None
+    commune: str | None = None
+    hamlet: str | None = None
+    address: str | None = None
+    location: Location | None = None
     cases_count: int
-    status: str  # ENUM value from model (pending, active, resolved, etc.)
-    severity: str
-    reported_date: Optional[datetime] = None
+    status: OutbreakStatus
+    severity: Severity
+    radius_km: float
+    reported_date: datetime
+    onset_date: datetime | None = None
+    source: str
+    source_url: str | None = None
+    verified: bool
+    verified_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
 
-__all__ = ["OutbreakCreate", "OutbreakUpdate", "OutbreakResponse", "Location"]
+class OutbreakImportResult(BaseModel):
+    """Kết quả một lần nhập dữ liệu ổ dịch từ nguồn bên ngoài."""
+
+    sources_configured: int
+    fetched: int
+    created: int
+    duplicates: int
+    invalid: int
+    errors: list[str] = []
+
+
+__all__ = ["OutbreakCreate", "OutbreakUpdate", "OutbreakResponse", "OutbreakImportResult", "Location"]

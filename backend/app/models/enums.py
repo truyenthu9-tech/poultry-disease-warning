@@ -1,80 +1,70 @@
-"""Enum PostgreSQL cho các mô hình."""
-
+"""Enum dùng chung cho models và schemas."""
 from enum import Enum
-from sqlalchemy import Enum as SA_Enum
-from sqlalchemy.dialects.postgresql import ENUM
 
 
-class PoultryTypeEnum(SA_Enum):
-    """Loại gia cầm."""
-    
-    name = "poultry_type"
-    
-    BROIILER = "broiler"
-    LAYER = "layer"
-    FREE_RANGE = "free_range"
+class PoultryType(str, Enum):
+    CHICKEN = "chicken"
     DUCK = "duck"
-    GOOSE = "goose"
-    TURKEY = "turkey"
+    MUSCOVY = "muscovy"
+    QUAIL = "quail"
+    OTHER = "other"
 
 
-class OutbreakStatusEnum(SA_Enum):
-    """Trạng thái ổ dịch."""
-    
-    name = "outbreak_status"
-    
-    SUSPECTED = "suspected"
-    CONFIRMED = "confirmed"
-    INVESTIGATING = "investigating"
-    RESOLVED = "resolved"
+class OutbreakStatus(str, Enum):
+    ACTIVE = "active"
+    CONTAINED = "contained"
+    CLOSED = "closed"
 
 
-class SeverityLevelEnum(SA_Enum):
-    """Mức độ nghiêm trọng."""
-    
-    name = "severity_level"
-    
+class Severity(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+    CRITICAL = "critical"
 
 
-class RiskLevelEnum(SA_Enum):
-    """Mức độ rủi ro."""
-    
-    name = "risk_level"
-    
-    VERY_HIGH = "very_high"
-    HIGH = "high"
-    MEDIUM = "medium"
+class RiskLevel(str, Enum):
     LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
-class AlertStatusEnum(SA_Enum):
-    """Trạng thái cảnh báo."""
-    
-    name = "alert_status"
-    
+class AlertStatus(str, Enum):
     PENDING = "pending"
     SENT = "sent"
+    FAILED = "failed"
     ACKNOWLEDGED = "acknowledged"
-    RESOLVED = "resolved"
 
 
 class UserRole(str, Enum):
-    """Vai trò tài khoản."""
-    
     ADMIN = "admin"
-    USER = "user"
     VET_OFFICER = "vet_officer"
     FARM_OWNER = "farm_owner"
+    USER = "user"
 
 
-__all__ = [
-    "PoultryTypeEnum",
-    "OutbreakStatusEnum", 
-    "SeverityLevelEnum",
-    "RiskLevelEnum",
-    "AlertStatusEnum",
-    "UserRole",
-]
+class FarmRegistrationStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+# Tên cũ giữ lại để code cũ import không bị lỗi
+PoultryTypeEnum = PoultryType
+OutbreakStatusEnum = OutbreakStatus
+SeverityLevelEnum = Severity
+RiskLevelEnum = RiskLevel
+AlertStatusEnum = AlertStatus
+
+
+def pg_enum(enum_cls: type[Enum], name: str):
+    """Tạo kiểu ENUM Postgres lưu theo value (chữ thường)."""
+    from sqlalchemy import Enum as SAEnum
+
+    return SAEnum(
+        enum_cls,
+        name=name,
+        values_callable=lambda e: [m.value for m in e],
+        create_type=False,
+    )

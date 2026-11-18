@@ -1,93 +1,80 @@
-"""Schema liên quan đến trang trại chăn nuôi."""
-from datetime import datetime, timezone
-from typing import Optional
+"""Schema trang trại."""
+import uuid
+from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.models.enums import PoultryType
+from app.schemas.common import Location, ORMResponse
 
-# Custom type enum for compatibility (not using SQLAlchemy ENUM for schemas)
-class FarmTypeEnum(BaseModel):
-    """Loại gia cầm - dùng cho validation schema."""
-
-    BROILER = "broiler"
-    LAYER = "layer"
-    FREE_RANGE = "free_range"
-    DUCK = "duck"
-    GOOSE = "goose"
-    TURKEY = "turkey"
-    OTHER = "other"
-
-
-class Location(BaseModel):
-    """Tọa độ địa lý cho API request/response."""
-
-    latitude: float = Field(gt=-90, lt=90)
-    longitude: float = Field(gt=-180, lt=180)
-
-    @field_validator("latitude", "longitude")
-    @classmethod
-    def validate_coords(cls, v):
-        return v
+PHONE_PATTERN = r"^(0|\+84)\d{9}$"
 
 
 class FarmCreate(BaseModel):
-    """Dữ liệu tạo trang trại."""
-
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(..., min_length=1, max_length=255)
-    owner_name: str = Field(..., min_length=1, max_length=255)
-    phone: str = Field(..., min_length=8, max_length=20)
-    email: str = Field(default=None)  # SPEC Section 3 yêu cầu field này, model chưa có FK constraint
-    address: str = Field(..., max_length=65535)
-    province: str = Field(..., min_length=1, max_length=100)
-    district: Optional[str] = Field(default=None, max_length=100)
-    latitude: float = Field(gt=-90, lt=90, alias="latitude")
-    longitude: float = Field(gt=-180, lt=180, alias="longitude")
-    poultry_type: str = Field(default="broiler", min_length=1, max_length=100)  # SPEC: String(100)
+    name: str = Field(min_length=1, max_length=255)
+    owner_name: str = Field(min_length=1, max_length=255)
+    phone: str = Field(pattern=PHONE_PATTERN)
+    email: EmailStr | None = None
+    address: str | None = None
+    province: str = Field(min_length=1, max_length=100)
+    district: str | None = Field(default=None, max_length=100)
+    commune: str | None = Field(default=None, max_length=100)
+    hamlet: str | None = Field(default=None, max_length=150)
+    poultry_type: PoultryType = PoultryType.CHICKEN
     capacity: int = Field(default=0, ge=0)
-    is_active: bool = Field(default=True)  # SPEC Section 3 có field này (model cũng có)
+    is_active: bool = True
+    location: Location
+    # Email của tài khoản được xem và xác nhận cảnh báo của trang trại này (chỉ cán bộ gán được)
+    owner_user_email: EmailStr | None = None
 
 
 class FarmUpdate(BaseModel):
-    """Dữ liệu cập nhật trang trại."""
-
     model_config = ConfigDict(extra="forbid")
 
-    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    owner_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    phone: Optional[str] = Field(default=None, max_length=20)
-    email: Optional[str] = Field(default=None)
-    address: Optional[str] = Field(default=None, max_length=65535)
-    province: Optional[str] = Field(default=None, max_length=100)
-    district: Optional[str] = Field(default=None, max_length=100)
-    latitude: Optional[float] = Field(default=None, gt=-90, lt=90)
-    longitude: Optional[float] = Field(default=None, gt=-180, lt=180)
-    poultry_type: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    capacity: Optional[int] = Field(default=None, ge=0)
-    is_active: Optional[bool] = Field(default=None)
-    notes: Optional[str] = Field(default=None, max_length=65535)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    owner_name: str | None = Field(default=None, min_length=1, max_length=255)
+    phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
+    email: EmailStr | None = None
+    address: str | None = None
+    province: str | None = Field(default=None, min_length=1, max_length=100)
+    district: str | None = Field(default=None, max_length=100)
+    commune: str | None = Field(default=None, max_length=100)
+    hamlet: str | None = Field(default=None, max_length=150)
+    poultry_type: PoultryType | None = None
+    capacity: int | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+    location: Location | None = None
+    # Gửi null để bỏ liên kết tài khoản. Không gửi thì giữ nguyên.
+    owner_user_email: EmailStr | None = None
 
 
-class FarmResponse(BaseModel):
-    """Thông tin trang trại."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str  # UUID string from model
+class FarmResponse(ORMResponse):
+    id: uuid.UUID
     name: str
-    owner_name: str
-    phone: str
-    email: Optional[str] = None  # SPEC Section 3 yêu cầu
-    poultry_type: str
+    # Các trường liên hệ là None khi người xem không phải admin hoặc cán bộ thú y
+    owner_name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    address: str | None = None
+    province: str
+    district: str | None = None
+    commune: str | None = None
+    hamlet: str | None = None
+    poultry_type: PoultryType
     capacity: int
     is_active: bool
-    location: Location
-    address: str
-    province: str
-    district: Optional[str] = None
+    # Chỉ admin và cán bộ thú y thấy tài khoản sở hữu
+    owner_user_id: uuid.UUID | None = None
+    location: Location | None = None
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime
 
 
-__all__ = ["FarmCreate", "FarmUpdate", "FarmResponse", "Location", "FarmTypeEnum"]
+class FarmNearby(BaseModel):
+    farm: FarmResponse
+    distance_km: float
+
+
+__all__ = ["FarmCreate", "FarmUpdate", "FarmResponse", "FarmNearby", "Location"]

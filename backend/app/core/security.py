@@ -1,79 +1,49 @@
-"""Xử lý mã hóa mật khẩu, tạo/kiểm tra JWT và middleware bảo vệ route có token."""
-
-import os
+"""Băm mật khẩu và tạo/kiểm tra JWT."""
+import base64
+import hashlib
+import hmac
 import secrets
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+import jwt
 
 from app.core.config import settings
-from app.models.user import User, UserRole
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
-
-ALGORITHM = settings.jwt_algorithm
-TOKEN_EXPIRE_MINUTES = settings.jwt_token_expire_minutes
+_ITERATIONS = 200_000
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
-
-
-def create_access_token(subject: str, role: UserRole = UserRole.FARMER) -> str:
-    now = datetime.now(timezone.utc)
-    payload = {
-        "sub": subject,
-        "role": role.value,
-        "exp": now + timezone.timedelta(minutes=TOKEN_EXPIRE_MINUTES),
-    }
-    return jwt.encode(
-        payload,
-        key=settings.jwt_secret_key,
-        algorithm=ALGORITHM,
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _ITERATIONS)
+    return "pbkdf2_sha256${}${}${}".format(
+        _ITERATIONS,
+        base64.b64encode(salt).decode(),
+        base64.b64encode(digest).decode(),
     )
 
 
-async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """Đóng vai trò dependency: kiểm tra token rồi trả về User (nâng 401 nếu lỗi)."""
-    if not token:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
+def verify_password(plain: str, hashed: str) -> bool:
     try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[ALGORITHM])
-        subject: str = payload.get("sub")
-        role: UserRole = UserRole(payload.get("role", ""))
-    except (JWTError, ValueError, TypeError):
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired JWT token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        scheme, iterations, salt_b64, digest_b64 = hashed.split("$")
+        if scheme != "pbkdf2_sha256":
+            return False
+        salt = base64.b64decode(salt_b64)
+        expected = base64.b64decode(digest_b64)
+        actual = hashlib.pbkdf2_hmac("sha256", plain.encode(), salt, int(iterations))
+        return hmac.compare_digest(actual, expected)
+    except Exception:
+        return False
 
-    if role not in UserRole.__members__:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Unknown role")
 
-    user = (await db.execute(select(User).where(User.username == subject))).scalar_one()
-    if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    if not user.is_active:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Account is disabled")
-    return user
+def create_access_token(subject: str, role: str, expires_minutes: int | None = None) -> str:
+    minutes = expires_minutes or settings.JWT_TOKEN_EXPIRE_MINUTES
+    payload = {
+        "sub": subject,
+        "role": role,
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=minutes),
+    }
+    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+def decode_access_token(token: str) -> dict:
+    return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])

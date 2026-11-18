@@ -1,66 +1,50 @@
-"""Chung cho các schema Pydantic."""
-from datetime import datetime
-from typing import List, Generic, TypeVar
+"""Schema dùng chung."""
+from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.utils.geo import geometry_to_location
 
 
 class Location(BaseModel):
-    """Tọa độ địa lý cho API request/response.
-    
-    Định dạng: JSON {"latitude": float, "longitude": float}
-    GeoAlchemy2 sẽ chuyển đổi từ/to WKB trong model layer.
-    """
+    """Tọa độ địa lý: {"latitude": float, "longitude": float}."""
 
-    latitude: float = Field(gt=-90, lt=90)
-    longitude: float = Field(gt=-180, lt=180)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
 
 
-class BaseResponse(BaseModel):
-    """Cấu trúc phản hồi chung."""
-
-    success: bool = True
-    message: str = "Thành công"
-    data: dict | None = None
-
-
-class BaseSchema(BaseModel):
-    """Cấu hình chung cho mọi schema."""
+class ORMResponse(BaseModel):
+    """Response đọc từ ORM, tự chuyển cột Geometry `location` sang JSON lat/lon."""
 
     model_config = ConfigDict(from_attributes=True)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _convert_location(cls, data: Any) -> Any:
+        if isinstance(data, dict) or "location" not in cls.model_fields:
+            return data
+        values = {name: getattr(data, name, None) for name in cls.model_fields}
+        values["location"] = geometry_to_location(getattr(data, "location", None))
+        return values
 
-T = TypeVar('T')
+
+T = TypeVar("T")
 
 
-class PageList(BaseModel, Generic[T]):
-    """Danh sách có pagination (cho Response)."""
-
-    items: List[T]
+class Page(BaseModel, Generic[T]):
+    items: list[T]
     total: int
     page: int
-    per_page: int
+    page_size: int
 
 
 class PaginationParams(BaseModel):
-    """Param cho phân trang."""
-
     page: int = Field(default=1, ge=1)
-    per_page: int = Field(default=10, ge=1, le=100)
+    page_size: int = Field(default=20, ge=1, le=100)
 
 
-class TimeBase(BaseModel):
-    """Trường thời gian chung."""
-
-    created_at: datetime
-    updated_at: datetime | None = None
+class MessageResponse(BaseModel):
+    message: str
 
 
-__all__ = [
-    "Location",
-    "BaseResponse", 
-    "BaseSchema",
-    "PageList",
-    "PaginationParams",
-    "TimeBase",
-]
+__all__ = ["Location", "ORMResponse", "Page", "PaginationParams", "MessageResponse"]

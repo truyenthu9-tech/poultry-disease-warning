@@ -16,26 +16,41 @@ services:
       retries: 10
       start_period: 10s
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-poultry_disease}
       TEST_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_TEST_DB:-poultry_disease_test}
       DEFAULT_ALERT_RADIUS_KM: "5"
+      OUTBREAK_FEED_URLS: ${OUTBREAK_FEED_URLS:-}
+      OUTBREAK_CRAWL_INTERVAL_MINUTES: ${OUTBREAK_CRAWL_INTERVAL_MINUTES:-0}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Hãy đặt JWT_SECRET_KEY trong file .env, tối thiểu 32 ký tự}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_USER_PASSWORD: ${SEED_USER_PASSWORD:-}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Cảnh báo dịch gia cầm}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8000:8000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
       interval: 30s
       timeout: 10s
-      retries: 10
+      retries: 5
 
 volumes:
   pgdata:

@@ -1,53 +1,24 @@
-"""Model người dùng / tài khoản."""
-from datetime import datetime, timezone
-from enum import Enum as PyEnum
-import uuid
-from sqlalchemy import CHAR, DateTime, String, Text, func
-from sqlalchemy.dialects.postgresql import ENUM
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+"""Model tài khoản."""
+from datetime import datetime
 
-from app.models.base import Base, BaseModel
-from app.core.config import settings
-from app.models.enums import UserRole
+from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.base import Base, IdTimestampMixin
+from app.models.enums import UserRole, pg_enum
 
 
-class User(BaseModel):
-    """Tài khoản người dùng."""
-
+class User(IdTimestampMixin, Base):
     __tablename__ = "users"
 
-    email: Mapped[str] = mapped_column(
-        String(255), unique=True, index=True, nullable=False
-    )
-    """Địa chỉ email đăng nhập."""
-
-    password: Mapped[str] = mapped_column(
-        CHAR(settings.PASSWORD_LENGTH, nullable=False), index=True
-    )
-    """Hash mật khẩu (bcrypt)."""
-
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    """Tên đầy đủ."""
-
     role: Mapped[UserRole] = mapped_column(
-        ENUM(UserRole, name="user_role"), default=UserRole.USER, index=True, nullable=False
+        pg_enum(UserRole, "user_role"), default=UserRole.USER, nullable=False
     )
-    """Vai trò: admin, user, vet_officer, farm_owner."""
-
-    is_active: Mapped[bool] = mapped_column(
-        bool, default=True, server_default="true", nullable=False
-    )
-    """Chưa bị vô hiệu hóa."""
-
-    last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    """Thời điểm đăng nhập gần nhất."""
-
-    farm: Mapped["Farm"] | None = (
-        relationship("Farm", back_populates="owner", uselist=False)
-    )
-    """Farm đang quản lý (nếu có)."""
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 __all__ = ["User", "UserRole"]

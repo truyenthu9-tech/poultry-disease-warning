@@ -1,95 +1,58 @@
-"""Model Ổ dịch với SQLAlchemy 2.0 và GeoAlchemy2."""
-
-from datetime import datetime, timezone
-
+"""Model ổ dịch."""
 import uuid
+from datetime import datetime
+
 from geoalchemy2 import Geometry
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, text
-from sqlalchemy.dialects.postgresql import ENUM
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, BaseModel
-from app.models.enums import (
-    OutbreakStatusEnum,
-    SeverityLevelEnum,
-)
+from app.core.config import settings
+from app.models.base import Base, IdTimestampMixin
+from app.models.enums import OutbreakStatus, Severity, pg_enum
 
 
-class Outbreak(Base):
-    """Ổ dịch gia cầm."""
-
+class Outbreak(IdTimestampMixin, Base):
     __tablename__ = "outbreaks"
+    # Mỗi bản ghi nhập từ một nguồn bên ngoài chỉ được lưu một lần
+    __table_args__ = (UniqueConstraint("source", "external_id", name="uq_outbreak_source_external"),)
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4())
-    )
-    """Mã định danh ổ dịch (UUID)."""
-
-    virus_type: Mapped[str] = mapped_column(String(255), nullable=False)
-    """Loại virus (ví dụ: AIV H5N1, NDV, IBV...)."""
-
+    virus_type: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     province: Mapped[str] = mapped_column(String(100), nullable=False)
-    """Tỉnh/Thành phố."""
-
-    district: Mapped[str] = mapped_column(String(100), nullable=True)
-    """Quận/Huyện (nếu có)."""
-
-    location: Mapped[str | None] = mapped_column(
-        Geometry(geometry_type="POINT", srid=4326),
-        nullable=True,
+    district: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    commune: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    hamlet: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location = mapped_column(
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=True), nullable=True
     )
-    """Định dạng GeoAlchemy2 POINT('SRID=4326;POINT(lon lat)')."""
-
-    address: Mapped[str] = mapped_column(Text, nullable=False)
-    """Địa chỉ chi tiết ổ dịch."""
-
-    cases_count: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", nullable=False
-    )
-    """Số lượng ca bệnh đã ghi nhận. Phải >= 0."""
-
-    status: Mapped[OutbreakStatusEnum | str] = mapped_column(
-        ENUM(OutbreakStatusEnum, name="outbreak_status"),
+    cases_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    status: Mapped[OutbreakStatus] = mapped_column(
+        pg_enum(OutbreakStatus, "outbreak_status"),
+        default=OutbreakStatus.ACTIVE,
         nullable=False,
+        index=True,
     )
-    """Trạng thái ổ dịch."""
-
-    severity: Mapped[SeverityLevelEnum | str] = mapped_column(
-        ENUM(SeverityLevelEnum, name="severity_level"),
-        nullable=False,
+    severity: Mapped[Severity] = mapped_column(
+        pg_enum(Severity, "severity_level"), default=Severity.MEDIUM, nullable=False
     )
-    """Mức độ nghiêm trọng."""
-
-    reported_date: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+    radius_km: Mapped[float] = mapped_column(
+        Float, default=lambda: settings.DEFAULT_ALERT_RADIUS_KM, nullable=False
     )
-    """Thời điểm báo cáo ổ dịch."""
-
-    created_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=True
+    reported_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    """Thời điểm tạo."""
-
-    updated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=True,
-    )
-    """Thời điểm cập nhật."""
-
-    # Relationship với Farm (trang trại liên quan)
-    farm: Mapped["Farm"] = relationship(
-        "Farm",
-        back_populates="outbreaks",
-        uselist=False,
-    )
-
-    # Relationship với Alert (các cảnh báo phát ra từ ổ dịch này)
-    alerts: Mapped[list["Alert"]] = relationship(
-        "Alert",
-        back_populates="outbreak",
-        lazy="selectin",
+    # Thời điểm người báo cáo ghi nhận bệnh bắt đầu; có thể khác ngày nhập dữ liệu.
+    onset_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Nguồn gốc và trạng thái xác nhận. Ổ dịch cán bộ nhập tay được coi là đã xác nhận,
+    # ổ dịch nhập từ nguồn bên ngoài phải được cán bộ xác nhận trước khi tạo được cảnh báo.
+    source: Mapped[str] = mapped_column(String(255), default="manual", server_default="manual", nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    verified: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
 

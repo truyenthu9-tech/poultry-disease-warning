@@ -1,7 +1,8 @@
 import apiClient from '../apiClient'
 
 export default {
-  all: () => apiClient.get('/farms'),
+  all: () => apiClient.getAllPages('/farms'),
+  mine: () => apiClient.getAllPages('/farms?mine=true'),
   get: (id) => apiClient.get(`/farms/${id}`),
   create: (payload) => apiClient.post('/farms', payload),
   update: (id, payload) => apiClient.put(`/farms/${id}`, payload),

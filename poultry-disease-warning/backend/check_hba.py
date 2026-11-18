@@ -1,1 +1,0 @@
-Get-Content "C:\Program Files\PostgreSQL\18\data\pg_hba.conf" -Raw | Select-String -Pattern "^(local|host)" -Context 1,2 | Select-Object -First 30
